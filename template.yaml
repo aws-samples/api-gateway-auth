@@ -1,0 +1,313 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HTTP API
+
+Parameters:
+  UserPoolId:
+    Type: String
+    Description: User poolID for Cognito provider
+  Audience:
+    Type: String
+    Description: Client id for user pool
+  HostedZoneId:
+    Type: String
+    Description: Hosted zone where record set needs to be created
+  DomainName:
+    Type: String
+    Description: Custom domain name
+  TruststoreKey:
+    Type: String
+    Description: Key for trust store file
+    Default: truststore.pem
+
+Globals:
+  Function:
+    Timeout: 5
+    MemorySize: 1536
+    Runtime: java8.al2
+    Handler: com.auth.App::handleRequest
+    CodeUri: auth-functions
+
+Resources:
+  TrustStoreBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+
+  TrustedStoreCustomResourceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: TrustedStoreCustomResourceFunction
+      Handler: com.auth.TrustedStoreCustomResourceHandler::handleRequest
+      Timeout: 120
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref TrustStoreBucket
+
+  PrivateCA:
+    Type: AWS::ACMPCA::CertificateAuthority
+    Properties:
+      KeyAlgorithm: RSA_2048
+      SigningAlgorithm: SHA256WITHRSA
+      Subject:
+        CommonName: pankaagrrootca
+      Type: ROOT
+
+  PrivateCACertificate:
+    Type: AWS::ACMPCA::Certificate
+    Properties:
+      CertificateAuthorityArn: !Ref PrivateCA
+      CertificateSigningRequest: !GetAtt PrivateCA.CertificateSigningRequest
+      SigningAlgorithm: SHA256WITHRSA
+      TemplateArn: 'arn:aws:acm-pca:::template/RootCACertificate/V1'
+      Validity:
+        Type: YEARS
+        Value: 10
+
+  PrivateCAActivation:
+    Type: AWS::ACMPCA::CertificateAuthorityActivation
+    Properties:
+      Certificate: !GetAtt
+        - PrivateCACertificate
+        - Certificate
+      CertificateAuthorityArn: !Ref PrivateCA
+      Status: ACTIVE
+
+  MtlsCA:
+    Type: AWS::ACMPCA::CertificateAuthority
+    Properties:
+      Type: SUBORDINATE
+      KeyAlgorithm: RSA_2048
+      SigningAlgorithm: SHA256WITHRSA
+      Subject:
+        CommonName: mtlsca
+
+  MtlsCertificate:
+    DependsOn: PrivateCAActivation
+    Type: AWS::ACMPCA::Certificate
+    Properties:
+      CertificateAuthorityArn: !Ref PrivateCA
+      CertificateSigningRequest: !GetAtt
+        - MtlsCA
+        - CertificateSigningRequest
+      SigningAlgorithm: SHA256WITHRSA
+      TemplateArn: 'arn:aws:acm-pca:::template/SubordinateCACertificate_PathLen3/V1'
+      Validity:
+        Type: YEARS
+        Value: 3
+
+  MtlsActivation:
+    Type: AWS::ACMPCA::CertificateAuthorityActivation
+    Properties:
+      CertificateAuthorityArn: !Ref MtlsCA
+      Certificate: !GetAtt
+        - MtlsCertificate
+        - Certificate
+      CertificateChain: !GetAtt
+        - PrivateCAActivation
+        - CompleteCertificateChain
+      Status: ACTIVE
+
+  ClientOneCert:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      CertificateAuthorityArn: !Ref MtlsCA
+      CertificateTransparencyLoggingPreference: ENABLED
+      DomainName: !Ref DomainName
+
+  CustomLambdaAuth:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: CustomLambdaAuth
+      Handler: com.auth.CustomLambdaAuth::handleRequest
+
+  LambdaAuthInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - apigateway.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/service-role/"
+      Policies:
+        - PolicyName: InvokeAuthLambda
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt CustomLambdaAuth.Arn
+
+  TrustedStoreCustomResource:
+    Type: Custom::TrustedStore
+    Properties:
+      ServiceToken: !GetAtt TrustedStoreCustomResourceFunction.Arn
+      TrustStoreBucket: !Ref TrustStoreBucket
+      TrustStoreKey: !Ref TruststoreKey
+      Certs:
+        - !GetAtt MtlsCertificate.Certificate
+        - !GetAtt PrivateCACertificate.Certificate
+
+  CustomDomainCert:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      CertificateTransparencyLoggingPreference: ENABLED
+      DomainName: !Ref DomainName
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId
+      ValidationMethod: DNS
+
+  SampleHttpApi:
+    Type: AWS::Serverless::HttpApi
+    DependsOn: TrustedStoreCustomResource
+    Properties:
+      Auth:
+        Authorizers:
+          GeneralAuth:
+            AuthorizationScopes:
+              - email
+            IdentitySource: "$request.header.Authorization"
+            JwtConfiguration:
+              issuer: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPoolId}
+              audience:
+                - !Ref Audience
+          CustomLambdaAuthorizer:
+            AuthorizerPayloadFormatVersion: 2.0
+            EnableSimpleResponses: True
+            FunctionInvokeRole: !GetAtt LambdaAuthInvokeRole.Arn
+            FunctionArn: !GetAtt CustomLambdaAuth.Arn
+            Identity:
+              Headers:
+                - Authorization
+              ReauthorizeEvery: 5
+      CorsConfiguration:
+        AllowMethods:
+          - GET
+        AllowOrigins:
+          - http://localhost:8080
+      Domain:
+        CertificateArn: !Ref CustomDomainCert
+        DomainName: !Ref DomainName
+        EndpointConfiguration: REGIONAL
+        SecurityPolicy: TLS_1_2
+        MutualTlsAuthentication:
+          TruststoreUri: !GetAtt TrustedStoreCustomResource.TrustStoreUri
+        Route53:
+          EvaluateTargetHealth: False
+          HostedZoneId: !Ref HostedZoneId
+      #DisableExecuteApiEndpoint: true
+
+  # Open route
+  LambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        RootGet:
+          Type: HttpApi
+          Properties:
+            Path: /
+            Method: get
+            ApiId: !Ref SampleHttpApi
+
+  # Basic auth
+  SimpleAuthLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        RootGet:
+          Type: HttpApi
+          Properties:
+            Auth:
+              Authorizer: GeneralAuth
+            Path: "/simple"
+            Method: get
+            ApiId: !Ref SampleHttpApi
+
+  CustomLambdaAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        RootGet:
+          Type: HttpApi
+          Properties:
+            Auth:
+              Authorizer: CustomLambdaAuthorizer
+            Path: /custom
+            Method: get
+            ApiId: !Ref SampleHttpApi
+
+  # Route for admins only: requires custom token (see cognito example)
+  AdminLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        DosGet:
+          Type: HttpApi
+          Properties:
+            Auth:
+              Authorizer: GeneralAuth
+              AuthorizationScopes:
+                - Fn::Sub:
+                    Admins-${Audience}
+            Path: /admin
+            Method: get
+            ApiId: !Ref SampleHttpApi
+
+  # Route for SU only: requires custom token (see cognito example)
+  SULambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        DosGet:
+          Type: HttpApi
+          Properties:
+            Auth:
+              Authorizer: GeneralAuth
+              AuthorizationScopes:
+                - Fn::Sub:
+                      SU-${Audience}
+            Path: /su
+            Method: get
+            ApiId: !Ref SampleHttpApi
+
+  # Route for Admins and SU only: requires custom token (see cognito example)
+  BothLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        DosGet:
+          Type: HttpApi
+          Properties:
+            Auth:
+              Authorizer: GeneralAuth
+              AuthorizationScopes:
+                - Fn::Sub:
+                    Admins-${Audience}
+                - Fn::Sub:
+                    SU-${Audience}
+            Path: /both
+            Method: get
+            ApiId: !Ref SampleHttpApi
+
+  # $default route used as catchall
+  CatchAllLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        RootGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SampleHttpApi
+
+Outputs:
+  ApiEndpoint:
+    Description: "HTTP API endpoint URL"
+    Value: !Sub "https://${SampleHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
