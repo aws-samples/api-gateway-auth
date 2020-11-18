@@ -247,3 +247,5 @@ samconfig-auth.toml
 .aws-sam
 .aws-sam/*
 
+/samconfig-apiauth.toml
+/samconfig-jwt-auth.toml

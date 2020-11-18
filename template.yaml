@@ -51,7 +51,7 @@ Resources:
       KeyAlgorithm: RSA_2048
       SigningAlgorithm: SHA256WITHRSA
       Subject:
-        CommonName: pankaagrrootca
+        CommonName: !Sub "${AWS::StackName}-rootca"
       Type: ROOT
 
   PrivateCACertificate:
@@ -81,7 +81,7 @@ Resources:
       KeyAlgorithm: RSA_2048
       SigningAlgorithm: SHA256WITHRSA
       Subject:
-        CommonName: mtlsca
+        CommonName: !Sub "${AWS::StackName}-mtlsca"
 
   MtlsCertificate:
     DependsOn: PrivateCAActivation
@@ -110,11 +110,15 @@ Resources:
       Status: ACTIVE
 
   ClientOneCert:
+    DependsOn: MtlsActivation
     Type: AWS::CertificateManager::Certificate
     Properties:
       CertificateAuthorityArn: !Ref MtlsCA
       CertificateTransparencyLoggingPreference: ENABLED
       DomainName: !Ref DomainName
+      Tags:
+        - Key: Name
+          Value: ClientOneCert
 
   CustomLambdaAuth:
     Type: AWS::Serverless::Function
@@ -203,6 +207,7 @@ Resources:
         Route53:
           EvaluateTargetHealth: False
           HostedZoneId: !Ref HostedZoneId
+      # https://github.com/aws/serverless-application-model/issues/1788
       #DisableExecuteApiEndpoint: true
 
   # Open route
