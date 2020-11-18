@@ -91,8 +91,9 @@ will be needed to decrypt the `Certificate private key` later.
 ```
 
 
-##
+## Credits
 
+Setting up of JWT authorizer is inspired from example in [sessions-with-aws-sam](https://github.com/aws-samples/sessions-with-aws-sam/tree/master/cognito)  
 
 ## Security
 
