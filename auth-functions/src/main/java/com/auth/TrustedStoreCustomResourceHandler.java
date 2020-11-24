@@ -82,14 +82,6 @@ public class TrustedStoreCustomResourceHandler implements RequestHandler<CloudFo
 
                     case "Delete": {
                         logger.log("DELETE!");
-                        DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
-                                .bucket(bucket)
-                                .key(key)
-                                .build();
-
-                        DeleteObjectResponse deleteObjectResponse = S3_CLIENT.deleteObject(deleteObjectRequest);
-                        context.getLogger().log(deleteObjectResponse.toString());
-                        responseData.put("Message", "Resource deletion successful!");
                         sendResponse(input, context, "SUCCESS", responseData);
                         break;
                     }
