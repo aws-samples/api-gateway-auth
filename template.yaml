@@ -204,6 +204,7 @@ Resources:
         SecurityPolicy: TLS_1_2
         MutualTlsAuthentication:
           TruststoreUri: !GetAtt TrustedStoreCustomResource.TrustStoreUri
+          TruststoreVersion: !GetAtt TrustedStoreCustomResource.ObjectVersion
         Route53:
           EvaluateTargetHealth: False
           HostedZoneId: !Ref HostedZoneId
@@ -316,3 +317,7 @@ Outputs:
   ApiEndpoint:
     Description: "HTTP API endpoint URL"
     Value: !Sub "https://${SampleHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  ClientOneCertArn:
+    Description: "Arn for client certificate"
+    Value: !Ref ClientOneCert
+

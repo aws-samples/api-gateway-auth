@@ -41,8 +41,7 @@ public class TrustedStoreCustomResourceHandler implements RequestHandler<CloudFo
         JSONObject responseData = new JSONObject();
         String bucket = (String) input.getResourceProperties().getOrDefault("TrustStoreBucket", "");
         String key = (String) input.getResourceProperties().getOrDefault("TrustStoreKey", "");
-        String concatenatedCert = ((List<String>) input.getResourceProperties().getOrDefault("Certs", emptyList())).stream()
-                .collect(Collectors.joining("\n"));
+        String concatenatedCert = String.join("\n", ((List<String>) input.getResourceProperties().getOrDefault("Certs", emptyList())));
 
         try {
             if (requestType == null | concatenatedCert.isEmpty()) {
@@ -61,6 +60,7 @@ public class TrustedStoreCustomResourceHandler implements RequestHandler<CloudFo
                                 .build(), RequestBody.fromString(concatenatedCert));
                         context.getLogger().log(putObjectResponse.toString());
                         responseData.put("TrustStoreUri", String.format("s3://%s/%s", bucket, key));
+                        responseData.put("ObjectVersion", putObjectResponse.versionId());
                         sendResponse(input, context, "SUCCESS", responseData);
                         break;
                     }
@@ -76,6 +76,7 @@ public class TrustedStoreCustomResourceHandler implements RequestHandler<CloudFo
                         context.getLogger().log(putObjectResponse.toString());
                         responseData.put("Message", "Resource update successful!");
                         responseData.put("TrustStoreUri", String.format("s3://%s/%s", bucket, key));
+                        responseData.put("ObjectVersion", putObjectResponse.versionId());
                         sendResponse(input, context, "SUCCESS", responseData);
                         break;
                     }
