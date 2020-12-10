@@ -3,6 +3,12 @@ Transform: AWS::Serverless-2016-10-31
 Description: HTTP API
 
 Parameters:
+  UserPoolId:
+    Type: String
+    Description: User poolID for Cognito provider
+  Audience:
+    Type: String
+    Description: Client id for user pool
   HostedZoneId:
     Type: String
     Description: Hosted zone where record set needs to be created
@@ -23,6 +29,22 @@ Globals:
     CodeUri: auth-functions
 
 Resources:
+  TrustStoreBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+
+  TrustedStoreCustomResourceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: TrustedStoreCustomResourceFunction
+      Handler: com.auth.TrustedStoreCustomResourceHandler::handleRequest
+      Timeout: 120
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref TrustStoreBucket
+
   PrivateCA:
     Type: AWS::ACMPCA::CertificateAuthority
     Properties:
@@ -98,21 +120,34 @@ Resources:
         - Key: Name
           Value: ClientOneCert
 
-  TrustStoreBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      VersioningConfiguration:
-        Status: Enabled
-
-  TrustedStoreCustomResourceFunction:
+  CustomLambdaAuth:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: TrustedStoreCustomResourceFunction
-      Handler: com.auth.TrustedStoreCustomResourceHandler::handleRequest
-      Timeout: 120
+      FunctionName: CustomLambdaAuth
+      Handler: com.auth.CustomLambdaAuth::handleRequest
+
+  LambdaAuthInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - apigateway.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/service-role/"
       Policies:
-        - S3CrudPolicy:
-            BucketName: !Ref TrustStoreBucket
+        - PolicyName: InvokeAuthLambda
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt CustomLambdaAuth.Arn
 
   TrustedStoreCustomResource:
     Type: Custom::TrustedStore
@@ -138,6 +173,25 @@ Resources:
     Type: AWS::Serverless::HttpApi
     DependsOn: TrustedStoreCustomResource
     Properties:
+      Auth:
+        Authorizers:
+          GeneralAuth:
+            AuthorizationScopes:
+              - email
+            IdentitySource: "$request.header.Authorization"
+            JwtConfiguration:
+              issuer: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPoolId}
+              audience:
+                - !Ref Audience
+          CustomLambdaAuthorizer:
+            AuthorizerPayloadFormatVersion: 2.0
+            EnableSimpleResponses: True
+            FunctionInvokeRole: !GetAtt LambdaAuthInvokeRole.Arn
+            FunctionArn: !GetAtt CustomLambdaAuth.Arn
+            Identity:
+              Headers:
+                - Authorization
+              ReauthorizeEvery: 5
       CorsConfiguration:
         AllowMethods:
           - GET
@@ -167,6 +221,96 @@ Resources:
           Properties:
             Path: /
             Method: get
+            ApiId: !Ref SampleHttpApi
+
+  # Basic auth
+  SimpleAuthLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        RootGet:
+          Type: HttpApi
+          Properties:
+            Auth:
+              Authorizer: GeneralAuth
+            Path: "/simple"
+            Method: get
+            ApiId: !Ref SampleHttpApi
+
+  CustomLambdaAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        RootGet:
+          Type: HttpApi
+          Properties:
+            Auth:
+              Authorizer: CustomLambdaAuthorizer
+            Path: /custom
+            Method: get
+            ApiId: !Ref SampleHttpApi
+
+  # Route for admins only: requires custom token (see cognito example)
+  AdminLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        DosGet:
+          Type: HttpApi
+          Properties:
+            Auth:
+              Authorizer: GeneralAuth
+              AuthorizationScopes:
+                - Fn::Sub:
+                    Admins-${Audience}
+            Path: /admin
+            Method: get
+            ApiId: !Ref SampleHttpApi
+
+  # Route for SU only: requires custom token (see cognito example)
+  SULambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        DosGet:
+          Type: HttpApi
+          Properties:
+            Auth:
+              Authorizer: GeneralAuth
+              AuthorizationScopes:
+                - Fn::Sub:
+                      SU-${Audience}
+            Path: /su
+            Method: get
+            ApiId: !Ref SampleHttpApi
+
+  # Route for Admins and SU only: requires custom token (see cognito example)
+  BothLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        DosGet:
+          Type: HttpApi
+          Properties:
+            Auth:
+              Authorizer: GeneralAuth
+              AuthorizationScopes:
+                - Fn::Sub:
+                    Admins-${Audience}
+                - Fn::Sub:
+                    SU-${Audience}
+            Path: /both
+            Method: get
+            ApiId: !Ref SampleHttpApi
+
+  # $default route used as catchall
+  CatchAllLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        RootGet:
+          Type: HttpApi
+          Properties:
             ApiId: !Ref SampleHttpApi
 
 Outputs:
