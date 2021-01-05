@@ -68,9 +68,7 @@ Resources:
   PrivateCAActivation:
     Type: AWS::ACMPCA::CertificateAuthorityActivation
     Properties:
-      Certificate: !GetAtt
-        - PrivateCACertificate
-        - Certificate
+      Certificate: !GetAtt PrivateCACertificate.Certificate
       CertificateAuthorityArn: !Ref PrivateCA
       Status: ACTIVE
 
@@ -88,9 +86,7 @@ Resources:
     Type: AWS::ACMPCA::Certificate
     Properties:
       CertificateAuthorityArn: !Ref PrivateCA
-      CertificateSigningRequest: !GetAtt
-        - MtlsCA
-        - CertificateSigningRequest
+      CertificateSigningRequest: !GetAtt MtlsCA.CertificateSigningRequest
       SigningAlgorithm: SHA256WITHRSA
       TemplateArn: 'arn:aws:acm-pca:::template/SubordinateCACertificate_PathLen3/V1'
       Validity:
@@ -101,12 +97,8 @@ Resources:
     Type: AWS::ACMPCA::CertificateAuthorityActivation
     Properties:
       CertificateAuthorityArn: !Ref MtlsCA
-      Certificate: !GetAtt
-        - MtlsCertificate
-        - Certificate
-      CertificateChain: !GetAtt
-        - PrivateCAActivation
-        - CompleteCertificateChain
+      Certificate: !GetAtt MtlsCertificate.Certificate
+      CertificateChain: !GetAtt PrivateCAActivation.CompleteCertificateChain
       Status: ACTIVE
 
   ClientOneCert:
