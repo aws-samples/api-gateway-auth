@@ -1,5 +1,7 @@
 ## api-gateway-auth
 
+**[Feature request](https://github.com/aws-samples/api-gateway-auth/issues/new)** | **[Detailed blog post](https://aws.amazon.com/blogs/compute/automating-mutual-tls-setup-for-amazon-api-gateway/)**
+
 This sample application showcases how to set up and automate different types of authentication supported by 
 [Amazon API Gateway HTTP API](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api.html) via [AWS SAM](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/what-is-sam.html)
 
