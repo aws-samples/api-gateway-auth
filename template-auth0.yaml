@@ -8,7 +8,7 @@ Parameters:
     Description: Issuer URL for your Auth0 Api
   APIAudience:
     Type: String
-    Description: Client id for user pool
+    Description: The identifier value of the API you created in the Auth0 API
 
 Globals:
   Function:

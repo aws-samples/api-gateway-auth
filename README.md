@@ -14,7 +14,7 @@ This SAM app uses java as language runtime for the lambda functions and custom r
 
 # Setup 
 
-### All authentications methods including mTLS:
+## All authentications methods including mTLS:
 
 The main SAM [template-all-auth.yaml](template-all-auth.yaml) is used to set up HTTP API and different types of auth mentioned above.
 As a pre requisite step, in order to configure JWT authorizer, you will need to run [template-cognito.yaml](template-cognito.yaml)
@@ -65,7 +65,7 @@ in [template-all-auth.yaml](template-all-auth.yaml#L174)
     Parameter overrides        : {'UserPoolId': 'from previous stack output', 'Audience': 'from previous stack output', 'HostedZoneId': 'Hosted zone id for custom domain', 'DomainName': 'domain name for the http api', 'TruststoreKey': 'truststore.pem'}
 ```
 
-### Only mTLS with HTTP API setup
+## Only mTLS with HTTP API setup
 
 #### Set up HTTP API
 
@@ -132,6 +132,34 @@ aws acm export-certificate --certificate-arn <<Certificat ARN from stack output>
 ```
     curl -v --cert client.pem  --key client.decrypted.key https://<<api-auth-demo.domain.com>>
 ```
+
+## Auth0 setup for REST and HTTP API
+
+API gateway both REST and HTTP can be configured to work with [Auth0](https://auth0.com/). There is a sample template
+[template-auth0.yaml](template-auth0.yaml) which sets up sample REST and HTTP Api to work with Auth0.
+
+Template expect two parameters:
+
+- IssuerUrl: The issuer of the token. Use https://YOUR_DOMAIN/. Be sure to include the trailing slash. 
+- APIAudience: The identifier value of the API you created in the Auth0 API.
+
+HTTP API will be set up using native [JWT Authorizers](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-jwt-authorizer.html)
+while REST API will be set up using [Token based Lambda Authorizers](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-use-lambda-authorizer.html) 
+to integrate with Auth0.
+
+### Setup
+
+```
+    api-gateway-auth$ sam build -t template-auth0.yaml
+```
+
+```
+    api-gateway-auth$ sam deploy -t template-auth0.yaml
+```
+
+**Note:** You might face `ClassNotFoundException` error due to issue with sam cli [#2903](https://github.com/aws/aws-sam-cli/issues/2093).
+Workaround is to just rename the `template-auth0.yaml` to `template.yaml` until the issue is fixes.
+
 
 ## Credits
 
