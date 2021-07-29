@@ -249,3 +249,6 @@ samconfig-auth.toml
 
 /samconfig-apiauth.toml
 /samconfig-jwt-auth.toml
+/samconfig-auth0.toml
+/samconfig-mtls.toml
+/samconfig-jwt.toml

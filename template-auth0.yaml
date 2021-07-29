@@ -1,0 +1,132 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: HTTP API
+
+Parameters:
+  IssuerUrl:
+    Type: String
+    Description: Issuer URL for your Auth0 Api
+  APIAudience:
+    Type: String
+    Description: Client id for user pool
+
+Globals:
+  Function:
+    Timeout: 5
+    MemorySize: 1536
+    Runtime: java8.al2
+    Handler: com.auth.App::handleRequest
+    CodeUri: auth-functions
+
+Resources:
+
+  CustomLambdaAuth:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: CustomLambdaAuth
+      Handler: com.auth.CustomLambdaAuth::handleRequest
+
+  LambdaAuthInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - apigateway.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/service-role/"
+      Policies:
+        - PolicyName: InvokeAuthLambda
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt CustomLambdaAuth.Arn
+
+  SampleHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Auth:
+        Authorizers:
+          GeneralAuth:
+            AuthorizationScopes:
+              - email
+            IdentitySource: "$request.header.Authorization"
+            JwtConfiguration:
+              issuer: !Ref IssuerUrl
+              audience:
+                - !Ref APIAudience
+          CustomLambdaAuthorizer:
+            AuthorizerPayloadFormatVersion: 2.0
+            EnableSimpleResponses: True
+            FunctionInvokeRole: !GetAtt LambdaAuthInvokeRole.Arn
+            FunctionArn: !GetAtt CustomLambdaAuth.Arn
+            Identity:
+              Headers:
+                - Authorization
+              ReauthorizeEvery: 5
+      CorsConfiguration:
+        AllowMethods:
+          - GET
+        AllowOrigins:
+          - http://localhost:3000
+
+  # Open route
+  LambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        RootGet:
+          Type: HttpApi
+          Properties:
+            Path: /
+            Method: get
+            ApiId: !Ref SampleHttpApi
+
+  # Basic auth
+  SimpleAuthLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        RootGet:
+          Type: HttpApi
+          Properties:
+            Auth:
+              Authorizer: GeneralAuth
+            Path: "/auth0"
+            Method: get
+            ApiId: !Ref SampleHttpApi
+
+  CustomLambdaAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        RootGet:
+          Type: HttpApi
+          Properties:
+            Auth:
+              Authorizer: CustomLambdaAuthorizer
+            Path: /custom
+            Method: get
+            ApiId: !Ref SampleHttpApi
+
+  # $default route used as catchall
+  CatchAllLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Events:
+        RootGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SampleHttpApi
+
+Outputs:
+  ApiEndpoint:
+    Description: "HTTP API endpoint URL"
+    Value: !Sub "https://${SampleHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
