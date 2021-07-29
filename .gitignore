@@ -252,3 +252,4 @@ samconfig-auth.toml
 /samconfig-auth0.toml
 /samconfig-mtls.toml
 /samconfig-jwt.toml
+auth0-custom-auth-lambda/node_modules/

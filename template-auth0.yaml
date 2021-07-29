@@ -26,6 +26,20 @@ Resources:
       FunctionName: CustomLambdaAuth
       Handler: com.auth.CustomLambdaAuth::handleRequest
 
+  Auth0CustomLambdaAuth:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: Auth0CustomLambdaAuth
+      Handler: index.handler
+      Runtime: nodejs12.x
+      CodeUri: auth0-custom-auth-lambda
+      Timeout: 15
+      Environment:
+        Variables:
+          JWKS_URI: !Sub "${IssuerUrl}.well-known/jwks.json"
+          TOKEN_ISSUER: !Ref IssuerUrl
+          AUDIENCE: !Ref APIAudience
+
   LambdaAuthInvokeRole:
     Type: AWS::IAM::Role
     Properties:
@@ -48,6 +62,27 @@ Resources:
                 Action:
                   - lambda:InvokeFunction
                 Resource: !GetAtt CustomLambdaAuth.Arn
+        - PolicyName: Auth0CustomLambdaInvoke
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt Auth0CustomLambdaAuth.Arn
+
+
+  SampleRestApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Auth:
+        Authorizers:
+          Auth0CustomAuthorizer:
+            FunctionInvokeRole: !GetAtt LambdaAuthInvokeRole.Arn
+            FunctionArn: !GetAtt Auth0CustomLambdaAuth.Arn
+            IdentitySource: "$request.header.Authorization"
+            FunctionPayloadType: TOKEN
 
   SampleHttpApi:
     Type: AWS::Serverless::HttpApi
@@ -88,13 +123,19 @@ Resources:
             Path: /
             Method: get
             ApiId: !Ref SampleHttpApi
+        RestRootGet:
+          Type: Api
+          Properties:
+            Path: /
+            Method: get
+            RestApiId: !Ref SampleRestApi
 
-  # Basic auth
+  # Auth0 auth
   SimpleAuthLambdaFunction:
     Type: AWS::Serverless::Function
     Properties:
       Events:
-        RootGet:
+        Auth0Get:
           Type: HttpApi
           Properties:
             Auth:
@@ -102,12 +143,20 @@ Resources:
             Path: "/auth0"
             Method: get
             ApiId: !Ref SampleHttpApi
+        RestAuth0Get:
+          Type: Api
+          Properties:
+            Auth:
+              Authorizer: Auth0CustomAuthorizer
+            Path: "/auth0"
+            Method: get
+            RestApiId: !Ref SampleRestApi
 
   CustomLambdaAuthFunction:
     Type: AWS::Serverless::Function
     Properties:
       Events:
-        RootGet:
+        CustomAuth:
           Type: HttpApi
           Properties:
             Auth:
@@ -121,12 +170,22 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Events:
-        RootGet:
+        CatchAll:
           Type: HttpApi
           Properties:
             ApiId: !Ref SampleHttpApi
+        RestCatchAll:
+          Type: Api
+          Properties:
+            Path: /{all+}
+            Method: get
+            RestApiId: !Ref SampleRestApi
+
 
 Outputs:
   ApiEndpoint:
     Description: "HTTP API endpoint URL"
     Value: !Sub "https://${SampleHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  RestApiEndpoint:
+    Description: "Rest API endpoint URL"
+    Value: !Sub "https://${SampleRestApi}.execute-api.${AWS::Region}.amazonaws.com/prod"

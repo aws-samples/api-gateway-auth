@@ -12,10 +12,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 /**
  * Handler for requests to Lambda function.
  */
-public class App implements RequestHandler<APIGatewayV2HTTPEvent, APIGatewayV2HTTPResponse> {
+public class App implements RequestHandler<Object, APIGatewayV2HTTPResponse> {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    public APIGatewayV2HTTPResponse handleRequest(final APIGatewayV2HTTPEvent input, final Context context) {
+    public APIGatewayV2HTTPResponse handleRequest(final Object input, final Context context) {
         try {
             HashMap<String, String> headers = new HashMap<>();
             headers.put("Content-Type", "application/json");
