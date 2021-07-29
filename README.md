@@ -138,7 +138,7 @@ aws acm export-certificate --certificate-arn <<Certificat ARN from stack output>
 API gateway both REST and HTTP can be configured to work with [Auth0](https://auth0.com/). There is a sample template
 [template-auth0.yaml](template-auth0.yaml) which sets up sample REST and HTTP Api to work with Auth0.
 
-Template expect two parameters:
+Template expects two parameters:
 
 - IssuerUrl: The issuer of the token. Use https://YOUR_DOMAIN/. Be sure to include the trailing slash. 
 - APIAudience: The identifier value of the API you created in the Auth0 API.
@@ -158,7 +158,7 @@ to integrate with Auth0.
 ```
 
 **Note:** You might face `ClassNotFoundException` error due to issue with sam cli [#2903](https://github.com/aws/aws-sam-cli/issues/2093).
-Workaround is to just rename the `template-auth0.yaml` to `template.yaml` until the issue is fixes.
+Workaround is to just rename the `template-auth0.yaml` to `template.yaml` until the issue is fixed.
 
 
 ## Credits
