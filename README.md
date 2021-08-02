@@ -33,7 +33,7 @@ in [template-all-auth.yaml](template-all-auth.yaml#L174)
 ```
 
 ```
-    api-gateway-auth$ sam deploy -t template-cognito.yaml -g
+    api-gateway-auth$ sam deploy -t .aws-sam/build/template.yaml -g
 
     Deploying with following values
     ===============================
@@ -53,7 +53,7 @@ in [template-all-auth.yaml](template-all-auth.yaml#L174)
 ```
 
 ```
-    api-gateway-auth$ sam deploy -t template-all-auth.yaml
+    api-gateway-auth$ sam deploy -t .aws-sam/build/template.yaml
 
     Deploying with following values
     ===============================
@@ -154,12 +154,8 @@ to integrate with Auth0.
 ```
 
 ```
-    api-gateway-auth$ sam deploy -t template-auth0.yaml
+    api-gateway-auth$ sam deploy -t .aws-sam/build/template.yaml
 ```
-
-**Note:** You might face `ClassNotFoundException` error due to issue with sam cli [#2903](https://github.com/aws/aws-sam-cli/issues/2093).
-Workaround is to just rename the `template-auth0.yaml` to `template.yaml` until the issue is fixed.
-
 
 ## Credits
 
