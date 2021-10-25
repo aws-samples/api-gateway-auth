@@ -9,7 +9,7 @@
   "author": "Jason Haines",
   "license": "Apache-2.0",
   "dependencies": {
-    "auth0": "^2.5.0",
+    "auth0": ">=2.37.0",
     "bluebird": "^3.4.6",
     "dotenv": "^5.0.1",
     "jsonwebtoken": "^8.2.1",
